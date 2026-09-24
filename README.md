@@ -20,6 +20,17 @@ Avec Docker :
 docker compose up --build
 ```
 
+Le port Node est lié uniquement à `127.0.0.1`. En production sans DNS, le profil `tls` publie directement l'IP avec un certificat IP valide :
+
+```env
+NODE_ENV=production
+HOST_PORT=4181
+COMPOSE_PROFILES=tls
+TLS_PORT=8445
+TLS_CERT_ROOT=/etc/letsencrypt
+PUBLIC_BASE_URL=https://45.9.188.69:8445
+```
+
 ## API
 
 Les écritures utilisent `X-API-Key` ou `Authorization: Bearer ...` lorsque `UPLOAD_API_KEY` est configurée. Les lectures sont publiques afin que les QR et Dino Passport fonctionnent sans compte.
@@ -75,7 +86,7 @@ Routes principales :
 
 Définir au minimum :
 
-- `PUBLIC_BASE_URL=https://files.votre-domaine.tld` ;
+- `PUBLIC_BASE_URL=https://45.9.188.69:8445` (ou le domaine choisi plus tard) ;
 - `PASSPORT_BASE_URL=https://passport.votre-domaine.tld/` ;
 - `UPLOAD_API_KEY`/`UPLOAD_API_KEYS` avec des valeurs aléatoires si les clients savent les envoyer ;
 - `CORS_ORIGINS` avec les origines exactes des applications.
