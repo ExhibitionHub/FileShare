@@ -11,12 +11,15 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "check": "node --check src/config.js && node --check src/storage.js && node --check src/app.js && node --check src/server.js && npm test"
+    "check": "node --check src/config.js && node --check src/capacity.js && node --check src/storage.js && node --check src/app.js && node --check src/server.js && npm test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
     "multer": "^2.0.2",
     "qrcode": "^1.5.4"
   },

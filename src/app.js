@@ -1,9 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import cors from "cors";
 import express from "express";
+import { rateLimit } from "express-rate-limit";
+import helmet from "helmet";
 import multer from "multer";
 import QRCode from "qrcode";
+import { CapacityGate } from "./capacity.js";
 import { FileNotFoundError } from "./storage.js";
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{20,80}$/;
@@ -30,10 +33,11 @@ function safeEqual(received, expected) {
 
 function writeAuthorization(config) {
   return (request, response, next) => {
-    if (!config.uploadApiKey) return next();
+    const keys = config.uploadApiKeys || (config.uploadApiKey ? [config.uploadApiKey] : []);
+    if (!keys.length && config.allowPublicUploads !== false) return next();
     const bearer = request.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
     const key = request.get("x-api-key") || bearer;
-    if (!safeEqual(key, config.uploadApiKey)) {
+    if (!keys.some((candidate) => safeEqual(key, candidate))) {
       return response.status(401).json({ error: "unauthorized", message: "Clé API absente ou invalide." });
     }
     return next();
@@ -63,13 +67,19 @@ function passportUrl(config, metadata, fallback) {
   return url.href;
 }
 
-function parseTtl(raw, fallback) {
-  if (raw === undefined || raw === "") return fallback;
+function parseTtl(raw, config) {
+  if (raw === undefined || raw === "") return config.defaultTtlHours;
   const value = Number.parseInt(raw, 10);
-  if (!Number.isInteger(value) || value < 0 || value > 24 * 365) {
-    const error = new Error("expiresInHours doit être compris entre 0 et 8760.");
+  if (!Number.isInteger(value) || value < 0 || value > config.maxTtlHours) {
+    const error = new Error(`expiresInHours doit être compris entre 0 et ${config.maxTtlHours}.`);
     error.status = 400;
     error.code = "invalid_expiration";
+    throw error;
+  }
+  if (value === 0 && !config.allowPermanentFiles) {
+    const error = new Error("La conservation permanente est désactivée.");
+    error.status = 400;
+    error.code = "permanent_storage_disabled";
     throw error;
   }
   return value;
@@ -138,20 +148,56 @@ function corsOptions(origins) {
   };
 }
 
+function overloadProtection(gate) {
+  return async (_request, response, next) => {
+    try {
+      const release = await gate.acquire();
+      response.once("finish", release);
+      response.once("close", release);
+      next();
+    } catch (error) {
+      response.set("Retry-After", "5");
+      response.status(503).json({ error: error.code || "overloaded", message: error.message });
+    }
+  };
+}
+
+function limiter({ windowMs, limit, scope }) {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    skip: (request) => request.path === "/health",
+    handler: (_request, response) => {
+      response.status(429).json({ error: "rate_limited", message: `Trop de requêtes ${scope}. Réessayez plus tard.` });
+    },
+  });
+}
+
 export function createApp({ config, store }) {
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", config.trustProxy);
+  app.set("trust proxy", config.trustProxyHops ? config.trustProxyHops : false);
+  app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(cors(corsOptions(config.corsOrigins)));
+  app.use(limiter({ windowMs: config.rateLimitWindowMs, limit: config.readRateLimit, scope: "depuis cette adresse" }));
 
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: config.maxImageBytes, files: 1, fields: 12 },
   }).fields([{ name: "file", maxCount: 1 }, { name: "image", maxCount: 1 }]);
   const authorizeWrite = writeAuthorization(config);
+  const uploadLimiter = limiter({ windowMs: config.rateLimitWindowMs, limit: config.uploadRateLimit, scope: "d'upload" });
+  const uploadGate = new CapacityGate({
+    maxActive: config.maxConcurrentUploads,
+    maxQueued: config.maxQueuedUploads,
+    waitTimeoutMs: config.uploadQueueTimeoutMs,
+  });
+  const protectUpload = overloadProtection(uploadGate);
 
   app.get("/health", (_request, response) => {
-    response.json({ status: "ok", service: "fileshare" });
+    response.json({ status: "ok", service: "fileshare", storage: store.driver, uploads: uploadGate.stats() });
   });
 
   async function createFile(request, response, kind) {
@@ -162,7 +208,7 @@ export function createApp({ config, store }) {
       return response.status(415).json({ error: "unsupported_image", message: "Formats acceptés : PNG, JPEG et WebP." });
     }
 
-    const ttlHours = parseTtl(request.body.expiresInHours, config.defaultTtlHours);
+    const ttlHours = parseTtl(request.body.expiresInHours, config);
     const now = new Date();
     const common = {
       kind,
@@ -189,11 +235,11 @@ export function createApp({ config, store }) {
     });
   }
 
-  app.post("/v1/files", authorizeWrite, upload, (request, response, next) => {
+  app.post("/v1/files", uploadLimiter, authorizeWrite, protectUpload, upload, (request, response, next) => {
     createFile(request, response, "file").catch(next);
   });
   for (const route of ["/creations", "/v1/creations"]) {
-    app.post(route, authorizeWrite, upload, (request, response, next) => {
+    app.post(route, uploadLimiter, authorizeWrite, protectUpload, upload, (request, response, next) => {
       createFile(request, response, "creation").catch(next);
     });
   }
@@ -203,12 +249,21 @@ export function createApp({ config, store }) {
       if (!ID_PATTERN.test(request.params.id)) throw new FileNotFoundError(request.params.id);
       const metadata = await store.get(request.params.id);
       response.type(metadata.mimeType);
+      const remainingSeconds = metadata.expiresAt
+        ? Math.max(0, Math.floor((Date.parse(metadata.expiresAt) - Date.now()) / 1000))
+        : 31_536_000;
       response.set({
-        "Cache-Control": metadata.expiresAt ? "public, max-age=3600" : "public, max-age=31536000, immutable",
+        "Cache-Control": metadata.expiresAt
+          ? `public, max-age=${Math.min(3600, remainingSeconds)}`
+          : "public, max-age=31536000, immutable",
         "Content-Length": String(metadata.size),
         "Content-Disposition": `inline; filename="${metadata.id}.${metadata.extension}"`,
       });
-      createReadStream(store.imagePath(metadata)).on("error", next).pipe(response);
+      const body = await store.openReadStream(metadata);
+      const stream = typeof body.pipe === "function"
+        ? body
+        : Readable.fromWeb(typeof body.transformToWebStream === "function" ? body.transformToWebStream() : body);
+      stream.on("error", next).pipe(response);
     } catch (error) {
       next(error);
     }

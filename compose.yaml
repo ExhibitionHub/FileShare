@@ -11,6 +11,11 @@ services:
       PASSPORT_BASE_URL: ${PASSPORT_BASE_URL:-http://localhost:4174/}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       UPLOAD_API_KEY: ${UPLOAD_API_KEY:-}
+      ALLOW_PUBLIC_UPLOADS: ${ALLOW_PUBLIC_UPLOADS:-true}
+      DEFAULT_TTL_HOURS: ${DEFAULT_TTL_HOURS:-168}
+      MAX_TTL_HOURS: ${MAX_TTL_HOURS:-720}
+      CLEANUP_ENABLED: "true"
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
     volumes:
       - fileshare_data:/app/data
 

@@ -24,8 +24,16 @@ beforeEach(async () => {
       corsOrigins: "*",
       uploadApiKey: "test-key",
       maxImageBytes: 5 * 1024 * 1024,
-      defaultTtlHours: 0,
-      trustProxy: false,
+      defaultTtlHours: 168,
+      maxTtlHours: 720,
+      allowPermanentFiles: false,
+      rateLimitWindowMs: 60_000,
+      readRateLimit: 10_000,
+      uploadRateLimit: 10_000,
+      maxConcurrentUploads: 4,
+      maxQueuedUploads: 4,
+      uploadQueueTimeoutMs: 1000,
+      trustProxyHops: 0,
     },
   });
 });
@@ -103,4 +111,14 @@ test("supprime une image et ses métadonnées", async () => {
   await request(app).delete(`/v1/files/${created.body.id}`).set("x-api-key", "test-key").expect(204);
   await request(app).get(`/images/${created.body.id}`).expect(404);
   await assert.rejects(readFile(join(directory, "metadata", `${created.body.id}.json`)));
+});
+
+test("attribue une expiration automatique", async () => {
+  const created = await request(app)
+    .post("/v1/files")
+    .set("x-api-key", "test-key")
+    .attach("file", PNG, { filename: "image.png", contentType: "image/png" })
+    .expect(201);
+  const lifetime = Date.parse(created.body.expiresAt) - Date.parse(created.body.createdAt);
+  assert.equal(lifetime, 168 * 3_600_000);
 });
