@@ -35,7 +35,7 @@ PUBLIC_BASE_URL=https://45.9.188.69:8445
 
 ## API
 
-Les écritures utilisent `X-API-Key` ou `Authorization: Bearer ...` lorsque `UPLOAD_API_KEY` est configurée. Les lectures sont publiques afin que les QR et Dino Passport fonctionnent sans compte.
+Les uploads utilisent `X-API-Key` ou `Authorization: Bearer ...` lorsque `ALLOW_PUBLIC_UPLOADS=false`. Avec `ALLOW_PUBLIC_UPLOADS=true`, les uploads restent publics pour les bornes, mais les suppressions exigent toujours une clé configurée. Les lectures sont publiques afin que les QR et Dino Passport fonctionnent sans compte.
 
 Publier une image générique :
 
@@ -120,7 +120,7 @@ Les protections applicatives sont actives par défaut :
 - cache public court pour les images expirables ;
 - en-têtes HTTP défensifs.
 
-En production, les uploads publics sont refusés tant qu'une clé n'est pas configurée. Le client navigateur Create Your Dino actuel ne peut pas conserver un secret : la meilleure configuration est un petit proxy serveur par site avec une clé propre. À défaut, `ALLOW_PUBLIC_UPLOADS=true` active explicitement les uploads sans clé ; conserver alors des limites strictes au niveau du CDN et restreindre `CORS_ORIGINS`.
+En production, les uploads publics sont refusés par défaut. Le client navigateur Create Your Dino actuel ne peut pas conserver un secret : la meilleure configuration est un petit proxy serveur par site avec une clé propre. À défaut, `ALLOW_PUBLIC_UPLOADS=true` active explicitement les uploads sans clé ; conserver alors une clé pour les suppressions, des limites strictes au niveau du proxy et restreindre `CORS_ORIGINS` dès que les origines définitives sont connues.
 
 Pour une charge mondiale, placer plusieurs instances derrière un CDN/load balancer et appliquer aussi les limites au niveau du CDN. Les limites Node sont volontairement locales à chaque instance. Lancer le nettoyage sur une seule instance (`CLEANUP_ENABLED=true`) et le désactiver sur les autres, ou s'appuyer principalement sur le cycle de vie S3.
 
