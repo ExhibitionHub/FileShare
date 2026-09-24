@@ -10,32 +10,32 @@ import { FileStore } from "../src/storage.js";
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 let directory;
 let app;
+let config;
+let store;
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "fileshare-test-"));
-  const store = new FileStore(directory);
+  store = new FileStore(directory);
   await store.init();
-  app = createApp({
-    store,
-    config: {
-      dataDir: directory,
-      publicBaseUrl: "https://files.example.test",
-      passportBaseUrl: "https://passport.example.test/app/",
-      corsOrigins: "*",
-      uploadApiKey: "test-key",
-      maxImageBytes: 5 * 1024 * 1024,
-      defaultTtlHours: 168,
-      maxTtlHours: 720,
-      allowPermanentFiles: false,
-      rateLimitWindowMs: 60_000,
-      readRateLimit: 10_000,
-      uploadRateLimit: 10_000,
-      maxConcurrentUploads: 4,
-      maxQueuedUploads: 4,
-      uploadQueueTimeoutMs: 1000,
-      trustProxyHops: 0,
-    },
-  });
+  config = {
+    dataDir: directory,
+    publicBaseUrl: "https://files.example.test",
+    passportBaseUrl: "https://passport.example.test/app/",
+    corsOrigins: "*",
+    uploadApiKey: "test-key",
+    maxImageBytes: 5 * 1024 * 1024,
+    defaultTtlHours: 168,
+    maxTtlHours: 720,
+    allowPermanentFiles: false,
+    rateLimitWindowMs: 60_000,
+    readRateLimit: 10_000,
+    uploadRateLimit: 10_000,
+    maxConcurrentUploads: 4,
+    maxQueuedUploads: 4,
+    uploadQueueTimeoutMs: 1000,
+    trustProxyHops: 0,
+  };
+  app = createApp({ store, config });
 });
 
 afterEach(async () => {
@@ -91,6 +91,20 @@ test("protège les écritures quand une clé est configurée", async () => {
     .post("/v1/files")
     .attach("file", PNG, { filename: "image.png", contentType: "image/png" })
     .expect(401);
+});
+
+test("autorise les uploads publics mais protège toujours la suppression", async () => {
+  const publicApp = createApp({
+    store,
+    config: { ...config, allowPublicUploads: true },
+  });
+  const created = await request(publicApp)
+    .post("/v1/files")
+    .attach("file", PNG, { filename: "image.png", contentType: "image/png" })
+    .expect(201);
+
+  await request(publicApp).delete(`/v1/files/${created.body.id}`).expect(401);
+  await request(publicApp).delete(`/v1/files/${created.body.id}`).set("x-api-key", "test-key").expect(204);
 });
 
 test("refuse un contenu qui n'est pas une image acceptée", async () => {

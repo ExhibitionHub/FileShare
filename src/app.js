@@ -31,10 +31,10 @@ function safeEqual(received, expected) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-function writeAuthorization(config) {
+function writeAuthorization(config, { allowPublic = false } = {}) {
   return (request, response, next) => {
     const keys = config.uploadApiKeys || (config.uploadApiKey ? [config.uploadApiKey] : []);
-    if (!keys.length && config.allowPublicUploads !== false) return next();
+    if (allowPublic && config.allowPublicUploads === true) return next();
     const bearer = request.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
     const key = request.get("x-api-key") || bearer;
     if (!keys.some((candidate) => safeEqual(key, candidate))) {
@@ -187,6 +187,7 @@ export function createApp({ config, store }) {
     storage: multer.memoryStorage(),
     limits: { fileSize: config.maxImageBytes, files: 1, fields: 12 },
   }).fields([{ name: "file", maxCount: 1 }, { name: "image", maxCount: 1 }]);
+  const authorizeUpload = writeAuthorization(config, { allowPublic: true });
   const authorizeWrite = writeAuthorization(config);
   const uploadLimiter = limiter({ windowMs: config.rateLimitWindowMs, limit: config.uploadRateLimit, scope: "d'upload" });
   const uploadGate = new CapacityGate({
@@ -235,11 +236,11 @@ export function createApp({ config, store }) {
     });
   }
 
-  app.post("/v1/files", uploadLimiter, authorizeWrite, protectUpload, upload, (request, response, next) => {
+  app.post("/v1/files", uploadLimiter, authorizeUpload, protectUpload, upload, (request, response, next) => {
     createFile(request, response, "file").catch(next);
   });
   for (const route of ["/creations", "/v1/creations"]) {
-    app.post(route, uploadLimiter, authorizeWrite, protectUpload, upload, (request, response, next) => {
+    app.post(route, uploadLimiter, authorizeUpload, protectUpload, upload, (request, response, next) => {
       createFile(request, response, "creation").catch(next);
     });
   }
