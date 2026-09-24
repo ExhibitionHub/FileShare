@@ -14,6 +14,8 @@ npm start
 
 Le service écoute par défaut sur `http://localhost:3101`. `GET /health` permet de vérifier son état.
 
+Instance VPS sans DNS : `https://45.9.188.69:8445/health`.
+
 Avec Docker :
 
 ```sh
