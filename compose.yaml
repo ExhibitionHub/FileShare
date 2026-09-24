@@ -1,0 +1,18 @@
+services:
+  fileshare:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3101:3101"
+    environment:
+      PORT: 3101
+      DATA_DIR: /app/data
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3101}
+      PASSPORT_BASE_URL: ${PASSPORT_BASE_URL:-http://localhost:4174/}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      UPLOAD_API_KEY: ${UPLOAD_API_KEY:-}
+    volumes:
+      - fileshare_data:/app/data
+
+volumes:
+  fileshare_data:
