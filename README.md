@@ -82,4 +82,14 @@ Définir au minimum :
 
 Le volume `DATA_DIR` doit être sauvegardé et persistant. Le reverse proxy doit fournir HTTPS : Dino Passport exige une URL d'API et une URL d'image HTTPS sur la même origine.
 
+### Branchement des applications Dino
+
+Une fois le domaine FileShare connu, utiliser la même base HTTPS dans les deux projets :
+
+- Create Your Dino, `public/config/runtime-config.json` : `publicationApiUrl: "https://files.votre-domaine.tld/"` ;
+- Dino Passport, `public/config/runtime-config.json` : `creationApiUrl: "https://files.votre-domaine.tld/"` ;
+- Create Your Dino, `passportUrl` : l'URL HTTPS publique de Dino Passport.
+
+Le client Create Your Dino publie alors l'image sur `POST /creations`, ajoute l'identifiant retourné à son QR et Dino Passport récupère exactement cette image avec `GET /creations/:id`.
+
 Pour lancer la validation : `npm run check`.
