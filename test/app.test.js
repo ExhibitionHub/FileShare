@@ -86,6 +86,47 @@ test("accepte le champ metadata envoyé par Create Your Dino", async () => {
   assert.equal(creation.body.backgroundId, "jungle-volcanique");
 });
 
+test("une borne peut choisir l'identifiant et réessayer sans doublon", async () => {
+  const id = "kiosk_Abcdefghijklmnopqrstu";
+  const upload = () => request(app)
+    .post("/creations")
+    .set("x-api-key", "test-key")
+    .field("id", id)
+    .field("metadata", JSON.stringify({ prefabId: "tyrannosaurus-crete", backgroundId: "jungle-volcanique" }))
+    .attach("image", PNG, { filename: "dino.png", contentType: "image/png" });
+  const first = await upload().expect(201);
+  assert.equal(first.body.id, id);
+  const retry = await upload().expect(200);
+  assert.equal(retry.body.id, id);
+  assert.equal(retry.body.createdAt, first.body.createdAt);
+  await request(app).get(`/creations/${id}`).expect(200);
+
+  await request(app)
+    .post("/creations")
+    .set("x-api-key", "test-key")
+    .field("id", "short")
+    .field("prefabId", "tyrannosaurus-crete")
+    .field("backgroundId", "jungle-volcanique")
+    .attach("image", PNG, { filename: "dino.png", contentType: "image/png" })
+    .expect(400);
+});
+
+test("les liens suivent l'adresse alternative derrière son préfixe", async () => {
+  const alternate = createApp({ store, config: { ...config, alternateBaseUrl: "https://app.example.test/fileshare" } });
+  const created = await request(alternate)
+    .post("/creations")
+    .set("x-api-key", "test-key")
+    .field("prefabId", "tyrannosaurus-crete")
+    .field("backgroundId", "jungle-volcanique")
+    .attach("image", PNG, { filename: "dino.png", contentType: "image/png" })
+    .expect(201);
+  assert.equal(created.body.imageUrl, `https://files.example.test/images/${created.body.id}`);
+  const relayed = await request(alternate).get(`/creations/${created.body.id}`).set("x-forwarded-prefix", "/fileshare").expect(200);
+  assert.equal(relayed.body.imageUrl, `https://app.example.test/fileshare/images/${created.body.id}`);
+  const other = await request(alternate).get(`/creations/${created.body.id}`).set("x-forwarded-prefix", "/elsewhere").expect(200);
+  assert.equal(other.body.imageUrl, `https://files.example.test/images/${created.body.id}`);
+});
+
 test("protège les écritures quand une clé est configurée", async () => {
   await request(app)
     .post("/v1/files")

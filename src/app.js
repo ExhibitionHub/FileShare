@@ -45,6 +45,12 @@ function writeAuthorization(config, { allowPublic = false } = {}) {
 }
 
 function baseUrl(request, config) {
+  // A request relayed under the alternate prefix gets links on that same address, so a client
+  // that reached FileShare there (and checks same-origin images) can follow them.
+  if (config.alternateBaseUrl) {
+    const prefix = new URL(config.alternateBaseUrl).pathname.replace(/\/$/, "");
+    if (prefix && request.get("x-forwarded-prefix") === prefix) return config.alternateBaseUrl;
+  }
   return config.publicBaseUrl || `${request.protocol}://${request.get("host")}`;
 }
 
@@ -223,9 +229,31 @@ export function createApp({ config, store }) {
     };
     const attributes = kind === "creation" ? { ...common, ...creationFields(request.body) } : common;
 
-    const metadata = await store.create(file.buffer, attributes);
+    // A kiosk may choose the creation id itself, so its QR can be shown before the upload succeeds.
+    // Retrying the same upload is then idempotent: the existing creation is returned.
+    const chosenId = kind === "creation" ? request.body.id : undefined;
+    let metadata;
+    let status = 201;
+    if (chosenId !== undefined && chosenId !== "") {
+      if (typeof chosenId !== "string" || !ID_PATTERN.test(chosenId) || chosenId.length < 22) {
+        throw new RequestError("invalid_creation", "id doit contenir de 22 à 80 caractères [A-Za-z0-9_-].");
+      }
+      const existing = await store.get(chosenId).catch((error) => {
+        if (error instanceof FileNotFoundError) return null;
+        throw error;
+      });
+      if (existing) {
+        if (existing.kind !== "creation") throw new RequestError("id_conflict", "Cet identifiant est déjà utilisé.", 409);
+        metadata = existing;
+        status = 200;
+      } else {
+        metadata = await store.create(file.buffer, attributes, { id: chosenId });
+      }
+    } else {
+      metadata = await store.create(file.buffer, attributes);
+    }
     const urls = publicUrls(request, config, metadata);
-    response.status(201).json({
+    response.status(status).json({
       id: metadata.id,
       ...urls,
       ...(kind === "creation" ? { passportUrl: passportUrl(config, metadata, urls.shareUrl) } : {}),

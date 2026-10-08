@@ -53,8 +53,7 @@ export class FileStore {
     return join(this.imageDirectory, `${metadata.id}.${metadata.extension}`);
   }
 
-  async create(buffer, attributes) {
-    const id = newId();
+  async create(buffer, attributes, { id = newId() } = {}) {
     const metadata = { id, ...attributes };
     const imagePath = this.imagePath(metadata);
     const metadataPath = this.metadataPath(id);
@@ -152,8 +151,7 @@ export class S3FileStore {
     await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 
-  async create(buffer, attributes) {
-    const id = newId();
+  async create(buffer, attributes, { id = newId() } = {}) {
     const metadata = { id, ...attributes };
     await this.client.send(new PutObjectCommand({
       Bucket: this.bucket,

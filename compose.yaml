@@ -22,6 +22,7 @@ services:
       S3_PREFIX: ${S3_PREFIX:-fileshare/}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3101}
       PASSPORT_BASE_URL: ${PASSPORT_BASE_URL:-http://localhost:4174/}
+      ALTERNATE_BASE_URL: ${ALTERNATE_BASE_URL:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       UPLOAD_API_KEY: ${UPLOAD_API_KEY:-}
       UPLOAD_API_KEYS: ${UPLOAD_API_KEYS:-}

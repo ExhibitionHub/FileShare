@@ -69,6 +69,8 @@ export function loadConfig() {
     storageDriver: driver,
     dataDir: resolve(process.env.DATA_DIR?.trim() || "data"),
     publicBaseUrl: url("PUBLIC_BASE_URL"),
+    // Second public address served by a reverse proxy under a path prefix (it sends X-Forwarded-Prefix).
+    alternateBaseUrl: url("ALTERNATE_BASE_URL"),
     passportBaseUrl: url("PASSPORT_BASE_URL"),
     corsOrigins: origins(),
     uploadApiKeys,
