@@ -59,7 +59,9 @@ curl -X POST http://localhost:3101/creations \
 
 Le client Create Your Dino existant peut aussi envoyer ses sélections dans un unique champ `metadata` JSON. Cette forme est acceptée sans adaptation du client : `image=@dino.webp` et `metadata={"prefabId":"...","backgroundId":"...","personality":"...","roar":"..."}`.
 
-La réponse contient `id`, `imageUrl`, `shareUrl`, `qrCodeUrl` et `passportUrl`. Le contrat attendu par Dino Passport est disponible sur `GET /creations/:id` :
+Une borne peut fournir son propre identifiant (champ `id`, 22 à 80 caractères `[A-Za-z0-9_-]`) : elle affiche ainsi son QR avant la fin de l'envoi, et un nouvel envoi avec le même identifiant renvoie la création existante (200) au lieu d'un doublon.
+
+La réponse contient `id`, `imageUrl`, `shareUrl`, `qrCodeUrl` et `passportUrl`. Avec `ALTERNATE_BASE_URL` (par exemple `https://app.dino.exhibitionhub.com/fileshare`), une requête relayée sous ce préfixe (en-tête `X-Forwarded-Prefix`) reçoit des liens sur cette adresse. Le contrat attendu par Dino Passport est disponible sur `GET /creations/:id` :
 
 ```json
 {
